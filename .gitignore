@@ -1,0 +1,8 @@
+Driver files
+*.cmd
+*.o
+*.ko
+*.symvers
+*.order
+*.mod
+*.mod.c
