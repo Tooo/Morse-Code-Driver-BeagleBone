@@ -42,7 +42,7 @@ static struct file_operations my_fops = {
 };
 
 // Character Device info for the Kernel:
-static struct miscdevice morsecode = {
+static struct miscdevice my_miscdevice = {
 		.minor    = MISC_DYNAMIC_MINOR,         // Let the system assign one.
 		.name     = MY_DEVICE_FILE,             // /dev/.... file.
 		.fops     = &my_fops                    // Callback functions.
@@ -58,7 +58,7 @@ static int __init morsecode_init(void)
 	printk(KERN_INFO "----> My Morse Code driver init().\n");
 
 	// Register as a misc driver:
-	ret = misc_register(&morsecode);
+	ret = misc_register(&my_miscdevice);
 
 	return ret;
 }
@@ -68,7 +68,7 @@ static void __exit morsecode_exit(void)
 	printk(KERN_INFO "<---- My Morse Code driver exit().\n");
 
 	// Unregister misc driver
-	misc_deregister(&morsecode);
+	misc_deregister(&my_miscdevice);
 }
 
 // Link our init/exit functions into the kernel's code.
