@@ -1,6 +1,10 @@
 // Morse Code driver:
 #include <linux/module.h>
+#include <linux/miscdevice.h>		// for misc-driver calls.
+
 // #error Are we building this file?
+
+#define MY_DEVICE_FILE  "morse-code"
 
 static int __init morsecode_init(void)
 {

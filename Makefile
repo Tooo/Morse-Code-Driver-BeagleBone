@@ -7,7 +7,7 @@
 # kernel build system and can use its variables.
 
 ifneq (${KERNELRELEASE},)
-	obj-m := morsecode.o
+	obj-m := morse-code.o
 
 # Otherwise we were called directly from the command line.
 # Invoke the kernel build system.
