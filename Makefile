@@ -26,6 +26,7 @@ default:
 	# copy result to public folder
 	mkdir -p ${PUBLIC_DRIVER_PWD}
 	cp *.ko ${PUBLIC_DRIVER_PWD}
+	cp *.sh ${PUBLIC_DRIVER_PWD}
 
 all: default
 
