@@ -4,7 +4,8 @@
 #include <linux/fs.h>
 #include <linux/delay.h>
 #include <linux/uaccess.h>
-#include <linux/leds.h>
+#include <linux/leds.h> 			// led support
+#include <linux/kfifo.h>            // FIFO support
 
 // #error Are we building this file?
 
@@ -61,6 +62,16 @@ static unsigned short morsecode_codes[] = {
 };
 
 #define MY_DEVICE_FILE  "morse-code"
+
+/**************************************************************
+ * FIFO Support
+ *************************************************************/
+// Info on the interface:
+//    https://www.kernel.org/doc/htmldocs/kernel-api/kfifo.html#idp10765104
+// Good example:
+//    http://lxr.free-electrons.com/source/samples/kfifo/bytestream-example.c
+#define FIFO_SIZE 256	// Must be a power of 2.
+static DECLARE_KFIFO(morsecode_fifo, char, FIFO_SIZE);
 
 /******************************************************
  * LED
@@ -139,8 +150,7 @@ static struct miscdevice my_miscdevice = {
 static int __init morsecode_init(void)
 {
 	int ret;
-
-	printk(KERN_INFO "----> My Morse Code driver init().\n");
+	printk(KERN_INFO "----> morse-code: init() file /dev/%s.\n", MY_DEVICE_FILE);
 
 	// Register as a misc driver:
 	ret = misc_register(&my_miscdevice);
@@ -153,7 +163,7 @@ static int __init morsecode_init(void)
 
 static void __exit morsecode_exit(void)
 {
-	printk(KERN_INFO "<---- My Morse Code driver exit().\n");
+	printk(KERN_INFO "<---- morse-code: exit().\n");
 
 	// Unregister misc driver
 	misc_deregister(&my_miscdevice);
