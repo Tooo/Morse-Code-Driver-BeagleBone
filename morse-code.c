@@ -4,10 +4,9 @@
 #include <linux/fs.h>
 #include <linux/delay.h>
 #include <linux/uaccess.h>
+#include <linux/leds.h>
 
 // #error Are we building this file?
-
-#define MY_DEVICE_FILE  "morse-code"
 
 // Morse Code Encodings (from http://en.wikipedia.org/wiki/Morse_code)
 //   Encoding created by Brian Fraser. Released under GPL.
@@ -61,13 +60,43 @@ static unsigned short morsecode_codes[] = {
 		0xEEA0	// Z 1110 1110 101
 };
 
+#define MY_DEVICE_FILE  "morse-code"
+
+/******************************************************
+ * LED
+ ******************************************************/
+
+DEFINE_LED_TRIGGER(ledtrig_morsecode);
+#define LED_ON_TIME_ms 100
+#define LED_OFF_TIME_ms 900
+
+static void my_led_blink(void)
+{
+	led_trigger_event(ledtrig_morsecode, LED_FULL);
+	msleep(LED_ON_TIME_ms);
+	led_trigger_event(ledtrig_morsecode, LED_OFF);
+	msleep(LED_OFF_TIME_ms);
+}
+
+static void led_register(void)
+{
+	// Setup the trigger's name:
+	led_trigger_register_simple("morse-code", &ledtrig_morsecode);
+}
+
+static void led_unregister(void)
+{
+	// Cleanup
+	led_trigger_unregister_simple(ledtrig_morsecode);
+}
+
 /******************************************************
  * Callbacks
  ******************************************************/
 static ssize_t my_read(struct file *file,
 		char *buff, size_t count, loff_t *ppos)
 {
-	printk(KERN_INFO "demo_miscdrv::my_read(), buff size %d, f_pos %d\n",
+	printk(KERN_INFO "morse-code: my_read(), buff size %d, f_pos %d\n",
 			(int) count, (int) *ppos);
 
 	return 0;  // # bytes actually read.
@@ -76,13 +105,17 @@ static ssize_t my_read(struct file *file,
 static ssize_t my_write(struct file *file,
 		const char *buff, size_t count, loff_t *ppos)
 {
-	printk(KERN_INFO "demo_miscdrv: In my_write(): ");
+	int i;
+	printk(KERN_INFO "morse-code: Flashing %d times for string.\n", count);
 
+	// Blink once per character (-1 to skip end null)
+	for (i = 0; i < count-1; i++) {
+		my_led_blink();
+	}
 
 	// Return # bytes actually written.
-	return 0;
+	return count;
 }
-
 /******************************************************
  * Misc support
  ******************************************************/
@@ -112,6 +145,9 @@ static int __init morsecode_init(void)
 	// Register as a misc driver:
 	ret = misc_register(&my_miscdevice);
 
+	// LED:
+	led_register();
+
 	return ret;
 }
 
@@ -121,6 +157,9 @@ static void __exit morsecode_exit(void)
 
 	// Unregister misc driver
 	misc_deregister(&my_miscdevice);
+
+	// LED:
+	led_unregister();
 }
 
 // Link our init/exit functions into the kernel's code.

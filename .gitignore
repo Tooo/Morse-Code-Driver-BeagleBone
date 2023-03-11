@@ -1,6 +1,7 @@
 # Driver files
 *.cmd
 *.o
+*.o.d
 *.ko
 *.symvers
 *.order
