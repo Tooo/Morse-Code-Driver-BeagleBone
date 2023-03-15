@@ -78,15 +78,38 @@ static DECLARE_KFIFO(morsecode_fifo, char, FIFO_SIZE);
  ******************************************************/
 
 DEFINE_LED_TRIGGER(ledtrig_morsecode);
-#define LED_ON_TIME_ms 100
-#define LED_OFF_TIME_ms 900
+#define LED_DOT_TIME_ms 200
+#define LED_DASH_TIME_ms (LED_DOT_TIME_ms*3)
+#define LED_CHAR_BREAK_ms (LED_DOT_TIME_ms*3)
+#define LED_WORD_BREAK_ms (LED_DOT_TIME_ms*7)
 
-static void my_led_blink(void)
+static void led_dot(void)
 {
 	led_trigger_event(ledtrig_morsecode, LED_FULL);
-	msleep(LED_ON_TIME_ms);
+	msleep(LED_DOT_TIME_ms);
+}
+
+static void led_dash(void)
+{
+	led_trigger_event(ledtrig_morsecode, LED_FULL);
+	msleep(LED_DASH_TIME_ms);
+}
+
+static void led_off(void)
+{
 	led_trigger_event(ledtrig_morsecode, LED_OFF);
-	msleep(LED_OFF_TIME_ms);
+}
+
+static void led_char_break(void)
+{
+	led_trigger_event(ledtrig_morsecode, LED_OFF);
+	msleep(LED_CHAR_BREAK_ms);
+}
+
+static void led_word_break(void)
+{
+	led_trigger_event(ledtrig_morsecode, LED_OFF);
+	msleep(LED_WORD_BREAK_ms);
 }
 
 static void led_register(void)
@@ -116,15 +139,38 @@ static ssize_t my_read(struct file *file,
 static ssize_t my_write(struct file *file,
 		const char *buff, size_t count, loff_t *ppos)
 {
-	int i;
-	printk(KERN_INFO "morse-code: Flashing %d times for string.\n", count);
+	int buff_idx = 0;
 
-	// Blink once per character (-1 to skip end null)
-	for (i = 0; i < count-1; i++) {
-		my_led_blink();
+	printk(KERN_INFO "morse-code: Converting string to morse code.\n");
+
+	// Find min character
+	for (buff_idx = 0; buff_idx < count; buff_idx++) {
+		char ch;
+		// Get the character
+		if (copy_from_user(&ch, &buff[buff_idx], sizeof(ch))) {
+			return -EFAULT;
+		}
+
+		// Skip special characters:
+		if (ch < ' ') {
+			continue;
+		}
+
+		if (ch == ' ') {
+			led_word_break();
+			continue;
+		}
+
+		if (ch >= 'a' && ch <= 'z') {
+			led_dot();
+		} else if (ch >= 'A' && ch <= 'Z') {
+			led_dash();
+		}
+		led_char_break();
 	}
 
 	// Return # bytes actually written.
+	*ppos += count;
 	return count;
 }
 /******************************************************
