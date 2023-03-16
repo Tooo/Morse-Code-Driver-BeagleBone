@@ -98,6 +98,11 @@ static void led_dash(void)
 	led_trigger_event(ledtrig_morsecode, LED_OFF);
 }
 
+static void led_dot_break(void)
+{
+	msleep(LED_DOT_TIME_ms);
+}
+
 static void led_char_break(void)
 {
 	msleep(LED_CHAR_BREAK_ms);
@@ -132,15 +137,45 @@ static ssize_t my_read(struct file *file,
 	return 0;  // # bytes actually read.
 }
 
+static void ch_to_morse(char ch)
+{
+	char lower_ch = tolower(ch);
+	int ch_int = lower_ch - 'a';
+	unsigned short morse_code = morsecode_codes[ch_int];
+
+	int j = 0;
+	int code_size = sizeof(*morsecode_codes) * 8;
+
+	int one_count = 0;
+	printk(KERN_INFO "morse-code: lower_ch: %c, ch_int: %d", lower_ch, ch_int);
+
+	for (j=code_size-1; j >= 0; j--) {
+		bool code = (morse_code & (1 << j)) != 0;
+		printk(KERN_INFO "morse-code: code: %d at %d", code, j);
+		if (code) {
+			one_count++;
+		} else {
+			if (one_count == 0) {
+				break;
+			} else if (one_count == 1) {
+				led_dot();
+			} else {
+				led_dash();
+			}
+			led_dot_break();
+			one_count = 0;
+		}
+	}
+}
+
 static ssize_t my_write(struct file *file,
 		const char *buff, size_t count, loff_t *ppos)
 {
 	int buff_idx = 0;
-
-	printk(KERN_INFO "morse-code: Converting %d sized string to morse code.\n", count);
-
 	bool word_break = false;
 	bool char_break = false;
+
+	printk(KERN_INFO "morse-code: Converting %d sized string to morse code.\n", count);
 
 	// Find min character
 	for (buff_idx = 0; buff_idx < count; buff_idx++) {
@@ -171,9 +206,7 @@ static ssize_t my_write(struct file *file,
 		word_break = false;
 		char_break = false;
 
-		ch = tolower(ch);
-		int ch_int = ch - 'a';
-		printk(KERN_INFO "%c = %d", ch, ch_int);
+		ch_to_morse(ch);
 
 		char_break = true;
 	}
