@@ -6,6 +6,7 @@
 #include <linux/uaccess.h>
 #include <linux/leds.h> 			// led support
 #include <linux/kfifo.h>            // FIFO support
+#include <linux/ctype.h>
 
 // #error Are we building this file?
 
@@ -87,28 +88,23 @@ static void led_dot(void)
 {
 	led_trigger_event(ledtrig_morsecode, LED_FULL);
 	msleep(LED_DOT_TIME_ms);
+	led_trigger_event(ledtrig_morsecode, LED_OFF);
 }
 
 static void led_dash(void)
 {
 	led_trigger_event(ledtrig_morsecode, LED_FULL);
 	msleep(LED_DASH_TIME_ms);
-}
-
-static void led_off(void)
-{
 	led_trigger_event(ledtrig_morsecode, LED_OFF);
 }
 
 static void led_char_break(void)
 {
-	led_trigger_event(ledtrig_morsecode, LED_OFF);
 	msleep(LED_CHAR_BREAK_ms);
 }
 
 static void led_word_break(void)
 {
-	led_trigger_event(ledtrig_morsecode, LED_OFF);
 	msleep(LED_WORD_BREAK_ms);
 }
 
@@ -143,6 +139,9 @@ static ssize_t my_write(struct file *file,
 
 	printk(KERN_INFO "morse-code: Converting string to morse code.\n");
 
+	bool word_break = false;
+	bool char_break = false;
+
 	// Find min character
 	for (buff_idx = 0; buff_idx < count; buff_idx++) {
 		char ch;
@@ -151,22 +150,34 @@ static ssize_t my_write(struct file *file,
 			return -EFAULT;
 		}
 
-		// Skip special characters:
-		if (ch < ' ') {
+
+		if (ch == ' ') {
+			word_break = true;
 			continue;
 		}
 
-		if (ch == ' ') {
-			led_word_break();
+		// Skip special characters:
+		if (!isalpha(ch)) {
 			continue;
 		}
+		
+		if (word_break) {
+			led_word_break();
+		} else if (char_break) {
+			led_char_break();
+		}
+
+		word_break = false;
+		char_break = false;
+
+		ch = tolower(ch);
 
 		if (ch >= 'a' && ch <= 'z') {
 			led_dot();
 		} else if (ch >= 'A' && ch <= 'Z') {
 			led_dash();
 		}
-		led_char_break();
+		char_break = true;
 	}
 
 	// Return # bytes actually written.
