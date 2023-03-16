@@ -137,7 +137,7 @@ static ssize_t my_write(struct file *file,
 {
 	int buff_idx = 0;
 
-	printk(KERN_INFO "morse-code: Converting string to morse code.\n");
+	printk(KERN_INFO "morse-code: Converting %d sized string to morse code.\n", count);
 
 	bool word_break = false;
 	bool char_break = false;
@@ -150,7 +150,7 @@ static ssize_t my_write(struct file *file,
 			return -EFAULT;
 		}
 
-
+		// Set word break to true for spaces
 		if (ch == ' ') {
 			word_break = true;
 			continue;
@@ -161,6 +161,7 @@ static ssize_t my_write(struct file *file,
 			continue;
 		}
 		
+		// Break either word or char
 		if (word_break) {
 			led_word_break();
 		} else if (char_break) {
@@ -171,12 +172,9 @@ static ssize_t my_write(struct file *file,
 		char_break = false;
 
 		ch = tolower(ch);
+		int ch_int = ch - 'a';
+		printk(KERN_INFO "%c = %d", ch, ch_int);
 
-		if (ch >= 'a' && ch <= 'z') {
-			led_dot();
-		} else if (ch >= 'A' && ch <= 'Z') {
-			led_dash();
-		}
 		char_break = true;
 	}
 
