@@ -147,6 +147,7 @@ static void ch_to_morse(char ch)
 	int code_size = sizeof(*morsecode_codes) * 8;
 
 	int one_count = 0;
+	bool led_blinked = false;
 	printk(KERN_INFO "morse-code: lower_ch: %c, ch_int: %d", lower_ch, ch_int);
 
 	for (j=code_size-1; j >= 0; j--) {
@@ -154,17 +155,25 @@ static void ch_to_morse(char ch)
 		if (code) {
 			one_count++;
 		} else {
+			// Exit when consecutive 0's
 			if (one_count == 0) {
 				break;
-			} else if (one_count == 1) {
-				printk(KERN_INFO "morse-code: dot");
+			} 
+			
+			// Breaks in single char
+			if (led_blinked) {
+				printk(KERN_INFO "morse-code: break - dot\n");
+				led_dot_break();
+			}
+
+			if (one_count == 1) {
+				printk(KERN_INFO "morse-code: dot\n");
 				led_dot();
 			} else {
-				printk(KERN_INFO "morse-code: dash");
+				printk(KERN_INFO "morse-code: dash\n");
 				led_dash();
 			}
-			printk(KERN_INFO "morse-code: break - dot");
-			led_dot_break();
+			led_blinked = true;
 			one_count = 0;
 		}
 	}
@@ -176,6 +185,7 @@ static ssize_t my_write(struct file *file,
 	int buff_idx = 0;
 	bool word_break = false;
 	bool char_break = false;
+	bool front_space = true;
 
 	printk(KERN_INFO "morse-code: Converting %d sized string to morse code.\n", count);
 
@@ -188,7 +198,7 @@ static ssize_t my_write(struct file *file,
 		}
 
 		// Set word break to true for spaces
-		if (ch == ' ') {
+		if (ch == ' ' && !front_space) {
 			word_break = true;
 			continue;
 		}
@@ -200,19 +210,18 @@ static ssize_t my_write(struct file *file,
 		
 		// Break either word or char
 		if (word_break) {
-			printk(KERN_INFO "morse-code: break - word");
+			printk(KERN_INFO "morse-code: break - word\n");
 			led_word_break();
 		} else if (char_break) {
-			printk(KERN_INFO "morse-code: break - char");
+			printk(KERN_INFO "morse-code: break - char\n");
 			led_char_break();
 		}
 
+		front_space = false;
 		word_break = false;
-		char_break = false;
+		char_break = true;
 
 		ch_to_morse(ch);
-
-		char_break = true;
 	}
 
 	// Return # bytes actually written.
