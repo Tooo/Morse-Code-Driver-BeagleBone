@@ -151,17 +151,19 @@ static void ch_to_morse(char ch)
 
 	for (j=code_size-1; j >= 0; j--) {
 		bool code = (morse_code & (1 << j)) != 0;
-		printk(KERN_INFO "morse-code: code: %d at %d", code, j);
 		if (code) {
 			one_count++;
 		} else {
 			if (one_count == 0) {
 				break;
 			} else if (one_count == 1) {
+				printk(KERN_INFO "morse-code: dot");
 				led_dot();
 			} else {
+				printk(KERN_INFO "morse-code: dash");
 				led_dash();
 			}
+			printk(KERN_INFO "morse-code: break - dot");
 			led_dot_break();
 			one_count = 0;
 		}
@@ -198,8 +200,10 @@ static ssize_t my_write(struct file *file,
 		
 		// Break either word or char
 		if (word_break) {
+			printk(KERN_INFO "morse-code: break - word");
 			led_word_break();
 		} else if (char_break) {
+			printk(KERN_INFO "morse-code: break - char");
 			led_char_break();
 		}
 
