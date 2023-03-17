@@ -217,10 +217,12 @@ static ssize_t my_write(struct file *file,
 			return -EFAULT;
 		}
 
-		// Set word break to true for spaces
-		if (ch == ' ' && !front_space) {
-			word_break = true;
-			continue;
+		// Set word break to true for whitespace
+		if (ch == ' ' || ch == '\n' || ch == '\r' || ch == '\t') {
+			if (!front_space) {
+				word_break = true;
+				continue;
+			}
 		}
 
 		// Skip special characters:
