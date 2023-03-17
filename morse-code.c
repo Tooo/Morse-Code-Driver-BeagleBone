@@ -131,13 +131,23 @@ static void led_unregister(void)
 static ssize_t my_read(struct file *file,
 		char *buff, size_t count, loff_t *ppos)
 {
+	int num_bytes_read = 0;
+
 	printk(KERN_INFO "morse-code: my_read(), buff size %d, f_pos %d\n",
 			(int) count, (int) *ppos);
+	
+	if (kfifo_is_empty(&morsecode_fifo)) {
+		return 0;
+	}
 
-	return 0;  // # bytes actually read.
+	if (kfifo_to_user(&morsecode_fifo, buff, count, &num_bytes_read)) {
+		return -EFAULT;
+	}
+	*ppos += num_bytes_read;
+	return num_bytes_read;
 }
 
-static void ch_to_morse(char ch)
+static int ch_to_morse(char ch)
 {
 	char lower_ch = tolower(ch);
 	int ch_int = lower_ch - 'a';
@@ -169,20 +179,30 @@ static void ch_to_morse(char ch)
 			if (one_count == 1) {
 				printk(KERN_INFO "morse-code: dot\n");
 				led_dot();
+				if (!kfifo_put(&morsecode_fifo, '.')) {
+					// Fifo full
+					return -EFAULT;
+				}
 			} else {
 				printk(KERN_INFO "morse-code: dash\n");
 				led_dash();
+				if (!kfifo_put(&morsecode_fifo, '-')) {
+					// Fifo full
+					return -EFAULT;
+				}
 			}
 			led_blinked = true;
 			one_count = 0;
 		}
 	}
+	return 0;
 }
 
 static ssize_t my_write(struct file *file,
 		const char *buff, size_t count, loff_t *ppos)
 {
 	int buff_idx = 0;
+	int i = 0;
 	bool word_break = false;
 	bool char_break = false;
 	bool front_space = true;
@@ -212,16 +232,34 @@ static ssize_t my_write(struct file *file,
 		if (word_break) {
 			printk(KERN_INFO "morse-code: break - word\n");
 			led_word_break();
+			for (i = 0; i < 3; i++) {
+				if (!kfifo_put(&morsecode_fifo, ' ')) {
+					// Fifo full
+					return -EFAULT;
+				}
+			}
+			
 		} else if (char_break) {
 			printk(KERN_INFO "morse-code: break - char\n");
 			led_char_break();
+			if (!kfifo_put(&morsecode_fifo, ' ')) {
+				// Fifo full
+				return -EFAULT;
+			}
 		}
 
 		front_space = false;
 		word_break = false;
 		char_break = true;
 
-		ch_to_morse(ch);
+		if (ch_to_morse(ch)) {
+			return -EFAULT;
+		}
+	}
+
+	if (!kfifo_put(&morsecode_fifo, '\n')) {
+		// Fifo full
+		return -EFAULT;
 	}
 
 	// Return # bytes actually written.
@@ -255,6 +293,9 @@ static int __init morsecode_init(void)
 
 	// Register as a misc driver:
 	ret = misc_register(&my_miscdevice);
+
+	// KFIFO
+	INIT_KFIFO(morsecode_fifo);
 
 	// LED:
 	led_register();
