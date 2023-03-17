@@ -79,39 +79,13 @@ static DECLARE_KFIFO(morsecode_fifo, char, FIFO_SIZE);
  ******************************************************/
 
 DEFINE_LED_TRIGGER(ledtrig_morsecode);
+
 #define LED_DOT_TIME_ms 200
 #define LED_DASH_TIME_ms (LED_DOT_TIME_ms*3)
+
+#define LED_INTER_CHAR_TIME_ms LED_DOT_TIME_ms
 #define LED_CHAR_BREAK_ms (LED_DOT_TIME_ms*3)
 #define LED_WORD_BREAK_ms (LED_DOT_TIME_ms*7)
-
-static void led_dot(void)
-{
-	led_trigger_event(ledtrig_morsecode, LED_FULL);
-	msleep(LED_DOT_TIME_ms);
-	led_trigger_event(ledtrig_morsecode, LED_OFF);
-}
-
-static void led_dash(void)
-{
-	led_trigger_event(ledtrig_morsecode, LED_FULL);
-	msleep(LED_DASH_TIME_ms);
-	led_trigger_event(ledtrig_morsecode, LED_OFF);
-}
-
-static void led_dot_break(void)
-{
-	msleep(LED_DOT_TIME_ms);
-}
-
-static void led_char_break(void)
-{
-	msleep(LED_CHAR_BREAK_ms);
-}
-
-static void led_word_break(void)
-{
-	msleep(LED_WORD_BREAK_ms);
-}
 
 static void led_register(void)
 {
@@ -126,26 +100,79 @@ static void led_unregister(void)
 }
 
 /******************************************************
- * Callbacks
+ * Helper Functions
  ******************************************************/
-static ssize_t my_read(struct file *file,
-		char *buff, size_t count, loff_t *ppos)
+
+static int morsecode_dot(void)
 {
-	int num_bytes_read = 0;
+	printk(KERN_INFO "morse-code: dot\n");
 
-	printk(KERN_INFO "morse-code: my_read(), buff size %d, f_pos %d\n",
-			(int) count, (int) *ppos);
-	
-	if (kfifo_is_empty(&morsecode_fifo)) {
-		return 0;
-	}
+	led_trigger_event(ledtrig_morsecode, LED_FULL);
+	msleep(LED_DOT_TIME_ms);
+	led_trigger_event(ledtrig_morsecode, LED_OFF);
 
-	if (kfifo_to_user(&morsecode_fifo, buff, count, &num_bytes_read)) {
+	if (!kfifo_put(&morsecode_fifo, '.')) {
+		// Fifo full
 		return -EFAULT;
 	}
-	*ppos += num_bytes_read;
-	return num_bytes_read;
+
+	return 0;
 }
+
+static int morsecode_dash(void)
+{
+	printk(KERN_INFO "morse-code: dash\n");
+
+	led_trigger_event(ledtrig_morsecode, LED_FULL);
+	msleep(LED_DASH_TIME_ms);
+	led_trigger_event(ledtrig_morsecode, LED_OFF);
+
+	if (!kfifo_put(&morsecode_fifo, '-')) {
+		// Fifo full
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static void morsecode_inter_char_break(void)
+{
+	printk(KERN_INFO "morse-code: break - inter char\n");
+
+	msleep(LED_INTER_CHAR_TIME_ms);
+}
+
+static int morsecode_char_break(void)
+{
+	printk(KERN_INFO "morse-code: break - char\n");
+
+	msleep(LED_CHAR_BREAK_ms);
+
+	if (!kfifo_put(&morsecode_fifo, ' ')) {
+		// Fifo full
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static int morsecode_word_break(void)
+{
+	int i = 0;
+	printk(KERN_INFO "morse-code: break - word\n");
+
+	msleep(LED_WORD_BREAK_ms);
+
+	for (i = 0; i < 3; i++) {
+		if (!kfifo_put(&morsecode_fifo, ' ')) {
+			// Fifo full
+			return -EFAULT;
+		}
+	}
+
+	return 0;
+}
+
 
 static int ch_to_morse(char ch)
 {
@@ -156,8 +183,9 @@ static int ch_to_morse(char ch)
 	int j = 0;
 	int code_size = sizeof(*morsecode_codes) * 8;
 
-	int one_count = 0;
-	bool led_blinked = false;
+	int one_count = 0;        // Number of consecutive ones in code
+	bool led_blinked = false; // True when after each "one"
+
 	printk(KERN_INFO "morse-code: lower_ch: %c, ch_int: %d", lower_ch, ch_int);
 
 	for (j=code_size-1; j >= 0; j--) {
@@ -172,22 +200,15 @@ static int ch_to_morse(char ch)
 			
 			// Breaks in single char
 			if (led_blinked) {
-				printk(KERN_INFO "morse-code: break - dot\n");
-				led_dot_break();
+				morsecode_inter_char_break();
 			}
 
 			if (one_count == 1) {
-				printk(KERN_INFO "morse-code: dot\n");
-				led_dot();
-				if (!kfifo_put(&morsecode_fifo, '.')) {
-					// Fifo full
+				if (morsecode_dot()) {
 					return -EFAULT;
 				}
 			} else {
-				printk(KERN_INFO "morse-code: dash\n");
-				led_dash();
-				if (!kfifo_put(&morsecode_fifo, '-')) {
-					// Fifo full
+				if (morsecode_dash()) {
 					return -EFAULT;
 				}
 			}
@@ -198,18 +219,40 @@ static int ch_to_morse(char ch)
 	return 0;
 }
 
+/******************************************************
+ * Read / Write
+ ******************************************************/
+
+static ssize_t my_read(struct file *file,
+		char *buff, size_t count, loff_t *ppos)
+{
+	int num_bytes_read = 0;
+
+	printk(KERN_INFO "morse-code: Reading buff size %d, f_pos %d\n",
+			(int) count, (int) *ppos);
+	
+	if (kfifo_is_empty(&morsecode_fifo)) {
+		return 0;
+	}
+
+	if (kfifo_to_user(&morsecode_fifo, buff, count, &num_bytes_read)) {
+		return -EFAULT;
+	}
+	*ppos += num_bytes_read;
+	return num_bytes_read;
+}
+
 static ssize_t my_write(struct file *file,
 		const char *buff, size_t count, loff_t *ppos)
 {
 	int buff_idx = 0;
-	int i = 0;
-	bool word_break = false;
-	bool char_break = false;
-	bool front_space = true;
+
+	bool word_break = false;  // True after whitespace (not front)
+	bool char_break = false;  // True after a char
+	bool front_space = true;  // True when front whitespace
 
 	printk(KERN_INFO "morse-code: Converting %d sized string to morse code.\n", count);
 
-	// Find min character
 	for (buff_idx = 0; buff_idx < count; buff_idx++) {
 		char ch;
 		// Get the character
@@ -232,20 +275,12 @@ static ssize_t my_write(struct file *file,
 		
 		// Break either word or char
 		if (word_break) {
-			printk(KERN_INFO "morse-code: break - word\n");
-			led_word_break();
-			for (i = 0; i < 3; i++) {
-				if (!kfifo_put(&morsecode_fifo, ' ')) {
-					// Fifo full
-					return -EFAULT;
-				}
+			if (morsecode_word_break()) {
+				return -EFAULT;
 			}
 			
 		} else if (char_break) {
-			printk(KERN_INFO "morse-code: break - char\n");
-			led_char_break();
-			if (!kfifo_put(&morsecode_fifo, ' ')) {
-				// Fifo full
+			if (morsecode_char_break()){
 				return -EFAULT;
 			}
 		}
@@ -321,6 +356,6 @@ module_init(morsecode_init);
 module_exit(morsecode_exit);
 
 // Information about this module:
-MODULE_AUTHOR("Travis");
+MODULE_AUTHOR("Travis and Gabriel");
 MODULE_DESCRIPTION("Morse Code driver");
 MODULE_LICENSE("GPL"); // Important to leave as GPL
