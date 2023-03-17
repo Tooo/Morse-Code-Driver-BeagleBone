@@ -173,14 +173,14 @@ static int morsecode_word_break(void)
 	return 0;
 }
 
-
+// Convert ch to morse: flash led + add to kfifo
 static int ch_to_morse(char ch)
 {
 	char lower_ch = tolower(ch);
 	int ch_int = lower_ch - 'a';
 	unsigned short morse_code = morsecode_codes[ch_int];
 
-	int j = 0;
+	int i = 0;
 	int code_size = sizeof(*morsecode_codes) * 8;
 
 	int one_count = 0;        // Number of consecutive ones in code
@@ -188,8 +188,8 @@ static int ch_to_morse(char ch)
 
 	printk(KERN_INFO "morse-code: lower_ch: %c, ch_int: %d", lower_ch, ch_int);
 
-	for (j=code_size-1; j >= 0; j--) {
-		bool code = (morse_code & (1 << j)) != 0;
+	for (i=code_size-1; i >= 0; i--) {
+		bool code = (morse_code & (1 << i)) != 0;
 		if (code) {
 			one_count++;
 		} else {
